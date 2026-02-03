@@ -42,7 +42,7 @@ export default function ReportsPage() {
         if (!selectedReport) return
         setActionLoading(true)
         try {
-            await resolveReport(selectedReport.id, undefined, 'dismiss')
+            await resolveReport(selectedReport.id, 'dismiss')
             setReports(reports.filter(r => r.id !== selectedReport.id))
             setIsDialogOpen(false)
         } catch (e) {
@@ -59,7 +59,7 @@ export default function ReportsPage() {
 
         setActionLoading(true)
         try {
-            await resolveReport(selectedReport.id, selectedReport.listing_id, 'delete_listing')
+            await resolveReport(selectedReport.id, 'delete_listing', selectedReport.listing_id)
             setReports(reports.filter(r => r.id !== selectedReport.id))
             setIsDialogOpen(false)
         } catch (e) {

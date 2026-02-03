@@ -22,11 +22,11 @@ export default function LoginPage() {
         setError("")
 
         try {
-            const result = await login(email)
+            const result = await login(email, password)
             if (result.success) {
                 router.push("/")
             } else {
-                setError("Email non reconnu. Essayez admin@chadito.com, docs@, ads@ ou analyst@")
+                setError(result.error || "Échec de connexion")
             }
         } catch (err) {
             setError("Une erreur est survenue")
@@ -57,7 +57,7 @@ export default function LoginPage() {
                             <Input
                                 id="email"
                                 type="email"
-                                placeholder="nom@exemple.com"
+                                placeholder="votre@email.com"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
@@ -81,12 +81,8 @@ export default function LoginPage() {
                             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Se connecter
                         </Button>
-                        <div className="text-xs text-center text-muted-foreground space-y-1">
-                            <p>Comptes de test :</p>
-                            <p>admin@chadito.com (Super Admin)</p>
-                            <p>docs@chadito.com (Modérateur Docs)</p>
-                            <p>ads@chadito.com (Modérateur Annonces)</p>
-                            <p>analyst@chadito.com (Analyste)</p>
+                        <div className="text-xs text-center text-muted-foreground">
+                            <p>Accès réservé aux administrateurs.</p>
                         </div>
                     </CardFooter>
                 </form>

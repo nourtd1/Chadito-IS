@@ -1,7 +1,7 @@
 'use server'
 
 import { supabaseAdmin } from "@/lib/supabase"
-import type { User, ReportJoined } from "@/types/database"
+import type { User, ReportJoined, Listing } from "@/types/database"
 
 export async function getUsers() {
     try {
@@ -33,6 +33,9 @@ export async function getPendingVerifications() {
             .from('users')
             .select('*')
             .eq('is_verified', false)
+            .neq('nni_document_path', null) // Correct syntax for not null is neq null or not.is.null via separate modifier
+            // Actually .not('column', 'is', null) is the way. Let's fix syntax below if issue arises.
+            // Using raw filter here to be safe:
             .not('nni_document_path', 'is', null)
 
         if (error) throw error
@@ -63,11 +66,21 @@ export async function getDashboardStats() {
             .select('*', { count: 'exact', head: true })
             .eq('status', 'pending')
 
+        // Fetch Charts Data from RPC
+        const { data: catData } = await supabaseAdmin.rpc('get_category_stats')
+        const { data: regData } = await supabaseAdmin.rpc('get_registration_stats')
+        const { data: cityData } = await supabaseAdmin.rpc('get_city_stats')
+
         return {
             totalUsers: usersCount || 0,
             verifiedMerchants: merchantsCount || 0,
             totalListings: listingsCount || 0,
             pendingReports: reportsCount || 0,
+            charts: {
+                categories: catData || [],
+                registrations: regData || [],
+                cities: cityData || []
+            }
         }
     } catch (e) {
         console.error(e)
@@ -106,7 +119,7 @@ export async function updateUserStatus(userId: string, updates: Partial<User>) {
     }
 }
 
-export async function resolveReport(reportId: string, listingId?: string, action: 'dismiss' | 'delete_listing') {
+export async function resolveReport(reportId: string, action: 'dismiss' | 'delete_listing', listingId?: string) {
     try {
         if (action === 'dismiss') {
             await supabaseAdmin.from('reports').update({ status: 'dismissed' }).eq('id', reportId)

@@ -11,6 +11,11 @@ if (isMockClient) {
     console.warn('⚠️ ATTENTION : Supabase URL manquante. L\'application utilise un client mocké.')
 }
 
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key'
+
+// Client Public (pour Auth et lecture publique)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
 // Client Admin avec contournement RLS (Role Service)
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: {

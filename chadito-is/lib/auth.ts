@@ -1,32 +1,61 @@
 import Cookies from 'js-cookie';
-import { UserRole, ROLES } from '@/types/roles';
-
-const MOCK_USERS: Record<string, UserRole> = {
-    'admin@chadito.com': 'super_admin',
-    'docs@chadito.com': 'moderator_docs',
-    'ads@chadito.com': 'moderator_ads',
-    'analyst@chadito.com': 'analyst',
-};
+import { supabase } from '@/lib/supabase';
+import { UserRole } from '@/types/roles';
 
 export const AUTH_COOKIE_NAME = 'chadito-auth-token';
 export const ROLE_COOKIE_NAME = 'chadito-user-role';
 
-export async function login(email: string): Promise<{ success: boolean; role?: UserRole }> {
-    // Simulation d'un appel API / Supabase
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    const role = MOCK_USERS[email];
-
-    if (role) {
-        Cookies.set(AUTH_COOKIE_NAME, 'mock-token-' + Date.now(), { expires: 1 });
-        Cookies.set(ROLE_COOKIE_NAME, role, { expires: 1 });
-        return { success: true, role };
+export async function login(email: string, password?: string): Promise<{ success: boolean; role?: UserRole; error?: string }> {
+    if (!password) {
+        return { success: false, error: "Mot de passe requis" };
     }
 
-    return { success: false };
+    try {
+        // 1. Authentification Supabase
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        });
+
+        if (authError || !authData.user) {
+            console.error("Auth Error:", authError);
+            return { success: false, error: "Email ou mot de passe incorrect" };
+        }
+
+        // 2. Vérification des droits via la table admin_users (RLS permet la lecture de son propre profil)
+        // On utilise 'supabase' (client public) car la policy RLS "Admins can view admin_users"
+        // autorise l'utilisateur connecté à voir sa propre ligne.
+        const { data: adminData, error: adminError } = await supabase
+            .from('admin_users')
+            .select('role')
+            .eq('id', authData.user.id)
+            .single();
+
+        if (adminError || !adminData) {
+            console.error("Admin Check Error:", adminError);
+            // L'utilisateur est connecté mais n'est pas dans la table admin
+            await supabase.auth.signOut();
+            return { success: false, error: "Accès non autorisé (Compte Admin requis)" };
+        }
+
+        const userRole = adminData.role as UserRole;
+
+        // 3. Persistance (Cookies pour middleware + Session Supabase auto)
+        // On stocke le token d'accès pour que le middleware puisse éventuellement le vérifier
+        // (bien que le middleware actuel vérifie juste la présence)
+        Cookies.set(AUTH_COOKIE_NAME, authData.session?.access_token || 'authenticated', { expires: 1 });
+        Cookies.set(ROLE_COOKIE_NAME, userRole, { expires: 1 });
+
+        return { success: true, role: userRole };
+
+    } catch (e) {
+        console.error("Login Exception:", e);
+        return { success: false, error: "Erreur technique lors de la connexion" };
+    }
 }
 
-export function logout() {
+export async function logout() {
+    await supabase.auth.signOut();
     Cookies.remove(AUTH_COOKIE_NAME);
     Cookies.remove(ROLE_COOKIE_NAME);
     window.location.href = '/login';
