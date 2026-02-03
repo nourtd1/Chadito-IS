@@ -53,7 +53,11 @@ export function Sidebar() {
 
     return (
         <div className="flex h-full w-64 flex-col border-r bg-card text-card-foreground">
-            <div className="flex h-16 items-center border-b px-6">
+            <div className="flex h-16 items-center gap-2 border-b px-6">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <div className="h-8 w-8 overflow-hidden rounded-full">
+                    <img src="/logo.jpeg" alt="Logo" className="h-full w-full object-cover scale-150" />
+                </div>
                 <h1 className="text-xl font-bold tracking-tight">Chadito IS</h1>
             </div>
             <nav className="flex-1 space-y-1 p-4">
@@ -64,8 +68,8 @@ export function Sidebar() {
                             key={item.name}
                             href={item.href}
                             className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${isActive
-                                    ? "bg-primary text-primary-foreground shadow-sm"
-                                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                ? "bg-primary text-primary-foreground shadow-sm"
+                                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                                 }`}
                         >
                             <item.icon className="h-4 w-4" />

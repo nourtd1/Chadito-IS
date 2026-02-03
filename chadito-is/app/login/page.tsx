@@ -38,7 +38,11 @@ export default function LoginPage() {
     return (
         <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
             <Card className="w-full max-w-md">
-                <CardHeader className="space-y-1">
+                <CardHeader className="space-y-1 flex flex-col items-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <div className="h-16 w-16 mb-2 overflow-hidden rounded-full shadow-sm">
+                        <img src="/logo.jpeg" alt="Logo Chadito" className="h-full w-full object-cover scale-150" />
+                    </div>
                     <CardTitle className="text-2xl font-bold text-center">Chadito IS Admin</CardTitle>
                     <CardDescription className="text-center">
                         Connectez-vous pour accéder au back-office
