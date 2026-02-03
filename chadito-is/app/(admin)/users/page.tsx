@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { supabaseAdmin } from "@/lib/supabase"
 import type { User } from "@/types/database"
+import { getUsers, updateUserStatus } from "@/app/actions"
 import { CITIES } from "@/lib/constants"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -65,29 +65,19 @@ export default function UsersPage() {
 
     const fetchUsers = async () => {
         setIsLoading(true)
-
-        // @ts-ignore
-        if (supabaseAdmin['isMockClient'] || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
-            setUsers(MOCK_USERS)
-            setIsLoading(false)
-            return
-        }
-
         try {
-            const { data, error } = await supabaseAdmin
-                .from('users') // Updated table name
-                .select('*')
-                .order('created_at', { ascending: false })
-
-            if (error || !data) {
-                console.error("Error fetching users:", error)
-                setUsers(MOCK_USERS) // Fallback
+            const data = await getUsers()
+            if (data && data.length > 0) {
+                setUsers(data)
             } else {
-                setUsers(data as User[])
+                // Keep mocks if empty for demo purposes, or set empty
+                // Checks if we are in a purely empty state or mock state
+                // For this user context, if empty, we might show mocks or just empty.
+                // Resetting to empty if real data fetch returns nothing/empty array
+                setUsers(data)
             }
         } catch (err) {
             console.error("Exception fetching users:", err)
-            setUsers(MOCK_USERS)
         } finally {
             setIsLoading(false)
         }
@@ -137,11 +127,17 @@ export default function UsersPage() {
         if (!selectedUser) return
         if (!confirm(`Êtes-vous sûr de vouloir bannir ${selectedUser.full_name} ?`)) return
 
-        // Note: 'status' field is not in the User interface provided, 
-        // assuming banning might handle a separate auth update or flag not yet in schema.
-        // For now, we'll just simulate the action.
-        alert("Action de bannissement simulée (Champ 'status' absent du schéma actuel).")
-        setIsDialogOpen(false)
+        setActionLoading(true)
+        try {
+            // Ban logic via server action could be mapped here if we add 'status' field.
+            // For now just console log as per previous logic, or update if field exists.
+            // Assuming we want to block them:
+            // await updateUserStatus(selectedUser.id, { status: 'banned' }) 
+            alert("Action simulée (Bannissement)")
+            setIsDialogOpen(false)
+        } finally {
+            setActionLoading(false)
+        }
     }
 
     const getAccountTypeBadge = (type: string) => {

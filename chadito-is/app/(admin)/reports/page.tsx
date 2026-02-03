@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { supabaseAdmin } from "@/lib/supabase"
+import { getReports, resolveReport } from "@/app/actions"
 import type { ReportJoined } from "@/types/database"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -17,67 +17,13 @@ export default function ReportsPage() {
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [actionLoading, setActionLoading] = useState(false)
 
-    // MOCK DATA
-    const MOCK_REPORTS: ReportJoined[] = [
-        {
-            id: "r1",
-            created_at: new Date(Date.now() - 3600000).toISOString(),
-            reason: "Arnaque suspectée",
-            status: "pending",
-            listing_id: "l1",
-            reported_by: "u2",
-            listing: {
-                title: "iPhone 15 Pro Max pas cher",
-                images: ["https://placehold.co/600x400"]
-            },
-            reporter: {
-                email: "vigilant@example.com"
-            }
-        },
-        {
-            id: "r2",
-            created_at: new Date(Date.now() - 86400000).toISOString(),
-            reason: "Contenu inapproprié",
-            status: "pending",
-            listing_id: "l2",
-            reported_by: "u3",
-            listing: {
-                title: "Service douteux",
-                images: ["https://placehold.co/600x400"]
-            },
-            reporter: {
-                email: "citizen@example.com"
-            }
-        }
-    ]
-
     const fetchReports = async () => {
         setIsLoading(true)
-
-        // @ts-ignore
-        if (supabaseAdmin['isMockClient'] || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
-            setReports(MOCK_REPORTS)
-            setIsLoading(false)
-            return
-        }
-
         try {
-            // Updated query using real table relationships: reports -> listings, reports -> users (as reporter)
-            const { data, error } = await supabaseAdmin
-                .from('reports')
-                .select('*, listing:listings(title, images), reporter:users(email)')
-                .eq('status', 'pending')
-                .order('created_at', { ascending: false })
-
-            if (error || !data) {
-                console.error("Error fetching reports:", error)
-                setReports(MOCK_REPORTS)
-            } else {
-                setReports(data as unknown as ReportJoined[])
-            }
+            const data = await getReports()
+            setReports(data || [])
         } catch (err) {
             console.error("Exception fetching reports:", err)
-            setReports(MOCK_REPORTS)
         } finally {
             setIsLoading(false)
         }
@@ -96,7 +42,7 @@ export default function ReportsPage() {
         if (!selectedReport) return
         setActionLoading(true)
         try {
-            await supabaseAdmin.from('reports').update({ status: 'dismissed' }).eq('id', selectedReport.id)
+            await resolveReport(selectedReport.id, undefined, 'dismiss')
             setReports(reports.filter(r => r.id !== selectedReport.id))
             setIsDialogOpen(false)
         } catch (e) {
@@ -113,13 +59,7 @@ export default function ReportsPage() {
 
         setActionLoading(true)
         try {
-            // 1. Delete from listings table
-            const { error: deleteError } = await supabaseAdmin.from('listings').delete().eq('id', selectedReport.listing_id)
-            if (deleteError) throw deleteError
-
-            // 2. Mark report as resolved
-            await supabaseAdmin.from('reports').update({ status: 'resolved' }).eq('id', selectedReport.id)
-
+            await resolveReport(selectedReport.id, selectedReport.listing_id, 'delete_listing')
             setReports(reports.filter(r => r.id !== selectedReport.id))
             setIsDialogOpen(false)
         } catch (e) {

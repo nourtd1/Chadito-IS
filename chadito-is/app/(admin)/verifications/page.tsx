@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { supabaseAdmin } from "@/lib/supabase"
 import type { User } from "@/types/database"
+import { getPendingVerifications, updateUserStatus, getSignedDocUrl } from "@/app/actions"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -53,31 +53,18 @@ export default function VerificationsPage() {
 
     const fetchPendingVerifications = async () => {
         setIsLoading(true)
-
-        // @ts-ignore
-        if (supabaseAdmin['isMockClient'] || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
-            setUsers(MOCK_USERS)
-            setIsLoading(false)
-            return
-        }
-
         try {
-            // We fetch users who are NOT verified but have an NNI document path (implying they submitted a request)
-            const { data, error } = await supabaseAdmin
-                .from('users')
-                .select('*')
-                .eq('is_verified', false)
-                .neq('nni_document_path', null)
-
-            if (error) {
-                console.error('Error fetching users:', error)
-                setUsers(MOCK_USERS)
+            const data = await getPendingVerifications()
+            if (data && data.length > 0) {
+                setUsers(data)
             } else {
-                setUsers(data as User[] || [])
+                // Fallback to mocks only if completely empty and env mandates it? 
+                // For now, if empty, we trust it's empty.
+                setUsers([])
             }
         } catch (err) {
             console.error('Unexpected error:', err)
-            setUsers(MOCK_USERS)
+            setUsers([])
         } finally {
             setIsLoading(false)
         }
@@ -97,21 +84,15 @@ export default function VerificationsPage() {
         if (user.nni_document_path) {
             setIsImageLoading(true)
             try {
-                // @ts-ignore
-                if (supabaseAdmin['isMockClient']) {
-                    // Mock Logic for consistency
-                    setSignedDocumentUrl("https://placehold.co/600x400/png?text=Document+Securise")
+                const url = await getSignedDocUrl(user.nni_document_path)
+                if (url) {
+                    setSignedDocumentUrl(url)
                 } else {
-                    const { data, error } = await supabaseAdmin
-                        .storage
-                        .from('documents')
-                        .createSignedUrl(user.nni_document_path, 60) // 60 seconds validity
-
-                    if (error) {
-                        console.error("Error creating signed url:", error)
-                        // Fallback or error indication
-                    } else if (data) {
-                        setSignedDocumentUrl(data.signedUrl)
+                    // Fallback mock check handled in action? No, action returns null if fails.
+                    // Client side fallback for demo if needed
+                    const isMock = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder')
+                    if (isMock) {
+                        setSignedDocumentUrl("https://placehold.co/600x400/png?text=Document+Securise")
                     }
                 }
             } catch (e) {
@@ -126,15 +107,12 @@ export default function VerificationsPage() {
         if (!selectedUser) return
         setActionLoading(true)
         try {
-            const { error } = await supabaseAdmin
-                .from('users')
-                .update({
-                    is_verified: true,
-                    account_type: 'merchant'
-                })
-                .eq('id', selectedUser.id)
+            const { success } = await updateUserStatus(selectedUser.id, {
+                is_verified: true,
+                account_type: 'merchant'
+            })
 
-            if (error) throw error
+            if (!success) throw new Error("Update failed")
 
             setUsers(users.filter(u => u.id !== selectedUser.id))
             setIsDialogOpen(false)
@@ -155,14 +133,8 @@ export default function VerificationsPage() {
 
         setActionLoading(true)
         try {
-            // Note: Since schema doesn't have rejection_reason or status field, 
-            // we will just technically keep them unverified. 
-            // In a real app we would send an email here with the reason.
-            // For this task, we assume the action is taken (e.g. notification sent)
-
-            // Optional: You might want to clear nni_document_path to force re-upload?
-            // For now, removing from local list to simulate 'processed' state.
-
+            // Logic handled purely client side for now as per previous implementation (logging) 
+            // since we don't have a status field for rejection.
             console.log(`Rejected user ${selectedUser.id} for reason: ${rejectionReason}`)
 
             setUsers(users.filter(u => u.id !== selectedUser.id))

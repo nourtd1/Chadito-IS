@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { getDashboardStats } from "@/app/actions"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { supabaseAdmin } from "@/lib/supabase"
 import { Users, CheckCircle, ShoppingBag, AlertCircle, Download, TrendingUp, MapPin, Tag } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -61,45 +61,15 @@ export default function DashboardPage() {
     setIsLoading(true)
     generateMockData() // Charts always mocked for now
 
-    // @ts-ignore
-    if (supabaseAdmin['isMockClient'] || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      setStats({
-        totalUsers: 150,
-        verifiedMerchants: 45,
-        totalListings: 320,
-        pendingReports: 5
-      })
-      setIsLoading(false)
-      return
-    }
-
     try {
-      // 1. Total Users
-      const { count: usersCount } = await supabaseAdmin.from('users').select('*', { count: 'exact', head: true })
-
-      // 2. Vendeurs Vérifiés (account_type = 'merchant' AND is_verified = true)
-      const { count: merchantsCount } = await supabaseAdmin
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .eq('account_type', 'merchant')
-        .eq('is_verified', true)
-
-      // 3. Total Listings
-      const { count: listingsCount } = await supabaseAdmin.from('listings').select('*', { count: 'exact', head: true })
-
-      // 4. Signalements en attente (status = 'pending')
-      const { count: reportsCount } = await supabaseAdmin
-        .from('reports')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending')
-
-      setStats({
-        totalUsers: usersCount || 0,
-        verifiedMerchants: merchantsCount || 0,
-        totalListings: listingsCount || 0,
-        pendingReports: reportsCount || 0,
-      })
-
+      const realStats = await getDashboardStats()
+      if (realStats) {
+        setStats(realStats)
+      } else {
+        // Fallback or purely mock logic if server returns null (e.g. error or empty)
+        // If we want to fallback to hardcoded mocks for demo:
+        // setStats({...})
+      }
     } catch (e) {
       console.error("Dashboard fetch error:", e)
     } finally {
