@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { supabaseAdmin } from "@/lib/supabase"
-import type { Profile } from "@/types/profile"
+import type { User } from "@/types/database"
+import { CITIES } from "@/lib/constants"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,83 +11,82 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Eye, Ban, Search, UserCheck, ShieldAlert, ShoppingBag, History } from "lucide-react"
+import { Eye, Ban, Search, CheckCircle, ShieldAlert } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 export default function UsersPage() {
-    const [users, setUsers] = useState<Profile[]>([])
-    const [filteredUsers, setFilteredUsers] = useState<Profile[]>([])
+    const [users, setUsers] = useState<User[]>([])
+    const [filteredUsers, setFilteredUsers] = useState<User[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
     const [statusFilter, setStatusFilter] = useState<string>("all")
+    const [cityFilter, setCityFilter] = useState<string>("all")
 
-    const [selectedUser, setSelectedUser] = useState<Profile | null>(null)
+    const [selectedUser, setSelectedUser] = useState<User | null>(null)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [actionLoading, setActionLoading] = useState(false)
 
-    // MOCK DATA for CRM
-    const MOCK_USERS: Profile[] = [
+    // MOCK DATA aligned with new User type
+    const MOCK_USERS: User[] = [
         {
             id: "u1",
             created_at: "2024-01-15T10:00:00Z",
-            email: "alice.martin@example.com",
-            first_name: "Alice",
-            last_name: "Martin",
-            city: "Paris",
-            verification_status: 'verified',
-            role: 'seller',
-            status: 'active',
-            ads_count: 12,
-            reports_count: 0
+            email: "alice.merchant@example.com",
+            full_name: "Alice Marchand",
+            city: "N'Djamena",
+            is_verified: true,
+            account_type: 'merchant',
+            avatar_url: '',
+            nni_number: '123456789'
         },
         {
             id: "u2",
             created_at: "2024-02-20T14:30:00Z",
-            email: "bob.dupont@example.com",
-            first_name: "Bob",
-            last_name: "Dupont",
-            city: "Lyon",
-            verification_status: 'none',
-            role: 'user',
-            status: 'active',
-            ads_count: 0,
-            reports_count: 1
+            email: "bob.standard@example.com",
+            full_name: "Bob Standard",
+            city: "Moundou",
+            is_verified: false,
+            account_type: 'standard',
+            avatar_url: '',
+            nni_number: ''
         },
         {
             id: "u3",
             created_at: "2024-03-05T09:15:00Z",
-            email: "charlie.bad@example.com",
-            first_name: "Charlie",
-            last_name: "Bad",
-            city: "Marseille",
-            verification_status: 'rejected',
-            role: 'seller',
-            status: 'suspended',
-            ads_count: 5,
-            reports_count: 8
+            email: "charlie.verified@example.com",
+            full_name: "Charlie Vérifié",
+            city: "Abéché",
+            is_verified: true,
+            account_type: 'standard',
+            avatar_url: '',
+            nni_number: '987654321'
         }
     ]
 
     const fetchUsers = async () => {
         setIsLoading(true)
+
+        // @ts-ignore
+        if (supabaseAdmin['isMockClient'] || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+            setUsers(MOCK_USERS)
+            setIsLoading(false)
+            return
+        }
+
         try {
             const { data, error } = await supabaseAdmin
-                .from('profiles')
+                .from('users') // Updated table name
                 .select('*')
                 .order('created_at', { ascending: false })
 
-            if (error || !data || data.length === 0) {
-                setUsers(MOCK_USERS)
+            if (error || !data) {
+                console.error("Error fetching users:", error)
+                setUsers(MOCK_USERS) // Fallback
             } else {
-                // Mapping pour s'assurer que les champs optionnels existent
-                const formattedUsers: Profile[] = data.map((u: any) => ({
-                    ...u,
-                    city: u.city || 'Non renseigné',
-                    role: u.role || 'user',
-                    status: u.status || 'active'
-                }))
-                setUsers(formattedUsers)
+                setUsers(data as User[])
             }
         } catch (err) {
+            console.error("Exception fetching users:", err)
             setUsers(MOCK_USERS)
         } finally {
             setIsLoading(false)
@@ -97,63 +97,63 @@ export default function UsersPage() {
         fetchUsers()
     }, [])
 
-    // Filtrage
+    // Filtering Logic
     useEffect(() => {
         let result = users
 
+        // 1. Search (Name or Email)
         if (searchQuery) {
             const lowerQuery = searchQuery.toLowerCase()
             result = result.filter(u =>
                 (u.email?.toLowerCase().includes(lowerQuery)) ||
-                (u.last_name?.toLowerCase().includes(lowerQuery)) ||
-                (u.first_name?.toLowerCase().includes(lowerQuery))
+                (u.full_name?.toLowerCase().includes(lowerQuery))
             )
         }
 
+        // 2. Status Filter (Verified)
         if (statusFilter !== 'all') {
             if (statusFilter === 'verified') {
-                result = result.filter(u => u.verification_status === 'verified')
+                result = result.filter(u => u.is_verified === true)
             } else if (statusFilter === 'unverified') {
-                result = result.filter(u => u.verification_status !== 'verified')
+                result = result.filter(u => u.is_verified === false)
             }
         }
 
+        // 3. City Filter
+        if (cityFilter !== 'all') {
+            result = result.filter(u => u.city === cityFilter)
+        }
+
         setFilteredUsers(result)
-    }, [searchQuery, statusFilter, users])
+    }, [searchQuery, statusFilter, cityFilter, users])
 
 
-    const handleOpenDetails = (user: Profile) => {
+    const handleOpenDetails = (user: User) => {
         setSelectedUser(user)
         setIsDialogOpen(true)
     }
 
     const handleBanUser = async () => {
         if (!selectedUser) return
-        if (!confirm(`Êtes-vous sûr de vouloir BANNIR définitivement ${selectedUser.first_name} ${selectedUser.last_name} ?`)) return
+        if (!confirm(`Êtes-vous sûr de vouloir bannir ${selectedUser.full_name} ?`)) return
 
-        setActionLoading(true)
-        try {
-            await supabaseAdmin.from('profiles').update({ status: 'banned' }).eq('id', selectedUser.id)
-
-            // Update local state
-            setUsers(users.map(u => u.id === selectedUser.id ? { ...u, status: 'banned' } : u))
-            setIsDialogOpen(false)
-        } catch (e) {
-            console.error(e)
-            alert('Erreur lors du bannissement')
-        } finally {
-            setActionLoading(false)
-        }
+        // Note: 'status' field is not in the User interface provided, 
+        // assuming banning might handle a separate auth update or flag not yet in schema.
+        // For now, we'll just simulate the action.
+        alert("Action de bannissement simulée (Champ 'status' absent du schéma actuel).")
+        setIsDialogOpen(false)
     }
 
-    const getStatusBadge = (status: string, verification_status: string) => {
-        if (status === 'banned') return <Badge variant="destructive">Banni</Badge>
-        if (status === 'suspended') return <Badge className="bg-orange-500">Suspendu</Badge>
+    const getAccountTypeBadge = (type: string) => {
+        return type === 'merchant'
+            ? <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-200">Marchand</Badge>
+            : <Badge variant="secondary" className="bg-gray-100 text-gray-700">Standard</Badge>
+    }
 
-        if (verification_status === 'verified') return <Badge className="bg-green-600 hover:bg-green-700">Vérifié</Badge>
-        if (verification_status === 'pending') return <Badge variant="secondary" className="text-yellow-600 bg-yellow-100">En attente</Badge>
-
-        return <Badge variant="outline">Non vérifié</Badge>
+    const getVerificationBadge = (isVerified: boolean) => {
+        return isVerified
+            ? <Badge className="bg-green-600 hover:bg-green-700 gap-1"><CheckCircle className="h-3 w-3" /> Vérifié</Badge>
+            : <Badge variant="outline" className="text-muted-foreground">Non vérifié</Badge>
     }
 
     return (
@@ -161,30 +161,45 @@ export default function UsersPage() {
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight">Gestion des Utilisateurs</h2>
-                    <p className="text-muted-foreground">{filteredUsers.length} utilisateurs trouvés</p>
+                    <p className="text-muted-foreground">{filteredUsers.length} comptes enregistrés</p>
                 </div>
-                <div className="flex gap-2 w-full md:w-auto">
-                    <div className="relative w-full md:w-64">
-                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Rechercher par nom ou email..."
-                            className="pl-8"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                    </div>
-                    <div className="w-[180px]">
-                        <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Filtrer par statut" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Tous les statuts</SelectItem>
-                                <SelectItem value="verified">Vérifiés</SelectItem>
-                                <SelectItem value="unverified">Non vérifiés</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
+            </div>
+
+            {/* Filters Bar */}
+            <div className="flex flex-col md:flex-row gap-3">
+                <div className="relative flex-1">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Rechercher par nom ou email..."
+                        className="pl-8"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                </div>
+                <div className="w-full md:w-[200px]">
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Statut Vérification" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Tous les statuts</SelectItem>
+                            <SelectItem value="verified">Vérifiés Uniquement</SelectItem>
+                            <SelectItem value="unverified">Non Vérifiés</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="w-full md:w-[200px]">
+                    <Select value={cityFilter} onValueChange={setCityFilter}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Filtrer par Ville" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Toutes les villes</SelectItem>
+                            {CITIES.map((city) => (
+                                <SelectItem key={city} value={city}>{city}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
             </div>
 
@@ -193,10 +208,10 @@ export default function UsersPage() {
                     <TableHeader>
                         <TableRow>
                             <TableHead>Utilisateur</TableHead>
+                            <TableHead>Type de Compte</TableHead>
                             <TableHead>Ville</TableHead>
-                            <TableHead>Inscription</TableHead>
-                            <TableHead>Rôle</TableHead>
                             <TableHead>Statut</TableHead>
+                            <TableHead>Date création</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -214,20 +229,18 @@ export default function UsersPage() {
                                 <TableRow key={user.id}>
                                     <TableCell>
                                         <div className="flex flex-col">
-                                            <span className="font-medium">{user.first_name} {user.last_name}</span>
+                                            <span className="font-medium">{user.full_name}</span>
                                             <span className="text-xs text-muted-foreground">{user.email}</span>
                                         </div>
                                     </TableCell>
+                                    <TableCell>
+                                        {getAccountTypeBadge(user.account_type)}
+                                    </TableCell>
                                     <TableCell>{user.city || '-'}</TableCell>
+                                    <TableCell>
+                                        {getVerificationBadge(user.is_verified)}
+                                    </TableCell>
                                     <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
-                                    <TableCell>
-                                        <span className={cn("text-xs font-semibold px-2 py-0.5 rounded", user.role === 'seller' ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-700")}>
-                                            {user.role === 'seller' ? 'Vendeur' : 'Standard'}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell>
-                                        {getStatusBadge(user.status, user.verification_status)}
-                                    </TableCell>
                                     <TableCell className="text-right">
                                         <Button size="sm" variant="ghost" onClick={() => handleOpenDetails(user)}>
                                             <Eye className="h-4 w-4" />
@@ -240,92 +253,57 @@ export default function UsersPage() {
                 </Table>
             </Card>
 
-            {/* Fiche Détaillée Utilisateur */}
+            {/* User Details Modal */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-xl">
                     <DialogHeader>
-                        <DialogTitle>Fiche Utilisateur : {selectedUser?.first_name} {selectedUser?.last_name}</DialogTitle>
+                        <DialogTitle>Fiche Utilisateur</DialogTitle>
                         <DialogDescription>ID: {selectedUser?.id}</DialogDescription>
                     </DialogHeader>
 
                     {selectedUser && (
                         <div className="grid gap-6 py-4">
-                            {/* Stats Rapides */}
-                            <div className="grid grid-cols-3 gap-4">
-                                <div className="border rounded-lg p-3 text-center bg-muted/20">
-                                    <ShoppingBag className="mx-auto h-5 w-5 text-muted-foreground mb-1" />
-                                    <div className="text-2xl font-bold">{selectedUser.ads_count ?? 0}</div>
-                                    <div className="text-xs text-muted-foreground">Annonces</div>
+                            <div className="flex items-center gap-4">
+                                <div className="h-16 w-16 rounded-full bg-slate-200 flex items-center justify-center text-xl font-bold text-slate-500 uppercase">
+                                    {selectedUser.full_name.substring(0, 2)}
                                 </div>
-                                <div className="border rounded-lg p-3 text-center bg-muted/20">
-                                    <ShieldAlert className="mx-auto h-5 w-5 text-muted-foreground mb-1" />
-                                    <div className="text-2xl font-bold text-orange-600">{selectedUser.reports_count ?? 0}</div>
-                                    <div className="text-xs text-muted-foreground">Signalements Reçus</div>
-                                </div>
-                                <div className="border rounded-lg p-3 text-center bg-muted/20">
-                                    <UserCheck className="mx-auto h-5 w-5 text-muted-foreground mb-1" />
-                                    <div className="text-sm font-semibold mt-2">
-                                        {selectedUser.verification_status === 'verified' ? 'Identité Vérifiée' : 'Non Vérifié'}
+                                <div>
+                                    <h3 className="text-lg font-bold">{selectedUser.full_name}</h3>
+                                    <p className="text-muted-foreground">{selectedUser.email}</p>
+                                    <div className="flex gap-2 mt-1">
+                                        {getAccountTypeBadge(selectedUser.account_type)}
+                                        {getVerificationBadge(selectedUser.is_verified)}
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Infos Contact */}
-                            <div className="grid grid-cols-2 gap-4 text-sm mt-2">
-                                <div className="space-y-1">
-                                    <span className="font-semibold text-muted-foreground">Email:</span>
-                                    <p>{selectedUser.email}</p>
+                            <div className="grid grid-cols-2 gap-4 text-sm border-t pt-4">
+                                <div>
+                                    <span className="font-semibold text-muted-foreground block mb-1">Ville</span>
+                                    {selectedUser.city || 'Non renseigné'}
                                 </div>
-                                <div className="space-y-1">
-                                    <span className="font-semibold text-muted-foreground">Ville:</span>
-                                    <p>{selectedUser.city || 'Non renseigné'}</p>
+                                <div>
+                                    <span className="font-semibold text-muted-foreground block mb-1">Numéro NNI</span>
+                                    {selectedUser.nni_number || 'Non renseigné'}
                                 </div>
-                                <div className="space-y-1">
-                                    <span className="font-semibold text-muted-foreground">Téléphone:</span>
-                                    <p>{selectedUser.phone || 'Non renseigné'}</p>
+                                <div>
+                                    <span className="font-semibold text-muted-foreground block mb-1">Date d'inscription</span>
+                                    {new Date(selectedUser.created_at).toLocaleDateString()}
                                 </div>
-                                <div className="space-y-1">
-                                    <span className="font-semibold text-muted-foreground">Compte créé le:</span>
-                                    <p>{new Date(selectedUser.created_at).toLocaleDateString()}</p>
-                                </div>
-                            </div>
-
-                            {/* Historique Placeholder */}
-                            <div className="border rounded-md p-4 bg-muted/10">
-                                <h4 className="flex items-center gap-2 font-semibold mb-2">
-                                    <History className="h-4 w-4" /> Activité Récente
-                                </h4>
-                                <ul className="text-sm space-y-2 text-muted-foreground">
-                                    <li>• Connexion détectée le {new Date().toLocaleDateString()}</li>
-                                    {selectedUser.reports_count && selectedUser.reports_count > 0 && (
-                                        <li className="text-destructive font-medium">• A reçu {selectedUser.reports_count} signalements sur ses annonces.</li>
-                                    )}
-                                    {selectedUser.ads_count && selectedUser.ads_count > 0 && (
-                                        <li>• A publié {selectedUser.ads_count} annonce(s).</li>
-                                    )}
-                                </ul>
                             </div>
                         </div>
                     )}
 
                     <DialogFooter>
-                        {selectedUser?.status !== 'banned' && (
-                            <Button
-                                variant="destructive"
-                                className="w-full sm:w-auto"
-                                onClick={handleBanUser}
-                                disabled={actionLoading}
-                            >
-                                <Ban className="mr-2 h-4 w-4" />
-                                Bannir l'utilisateur
-                            </Button>
-                        )}
-                        {selectedUser?.status === 'banned' && (
-                            <Button variant="outline" disabled className="w-full sm:w-auto border-destructive text-destructive opacity-100">
-                                <Ban className="mr-2 h-4 w-4" />
-                                Utilisateur Banni
-                            </Button>
-                        )}
+                        <Button
+                            variant="destructive"
+                            onClick={handleBanUser}
+                            disabled={actionLoading}
+                            className="w-full sm:w-auto"
+                        >
+                            <Ban className="mr-2 h-4 w-4" />
+                            Bloquer l'utilisateur
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

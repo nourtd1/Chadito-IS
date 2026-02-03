@@ -2,95 +2,81 @@
 
 import { useEffect, useState } from "react"
 import { supabaseAdmin } from "@/lib/supabase"
-import type { Report, Product } from "@/types/report"
-import { Card, CardContent } from "@/components/ui/card"
+import type { ReportJoined } from "@/types/database"
+import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { AlertOctagon, Eye, Trash2, ShieldOff, CheckCircle, Loader2, AlertTriangle } from "lucide-react"
+import { AlertOctagon, Eye, Trash2, CheckCircle, ShieldAlert } from "lucide-react"
 
 export default function ReportsPage() {
-    const [reports, setReports] = useState<Report[]>([])
+    const [reports, setReports] = useState<ReportJoined[]>([])
     const [isLoading, setIsLoading] = useState(true)
-    const [selectedReport, setSelectedReport] = useState<Report | null>(null)
+    const [selectedReport, setSelectedReport] = useState<ReportJoined | null>(null)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [actionLoading, setActionLoading] = useState(false)
 
     // MOCK DATA
-    const MOCK_REPORTS: Report[] = [
+    const MOCK_REPORTS: ReportJoined[] = [
         {
             id: "r1",
             created_at: new Date(Date.now() - 3600000).toISOString(),
-            reason: "scam",
+            reason: "Arnaque suspectée",
             status: "pending",
-            product_id: "p1",
-            reporter_id: "u2",
-            description: "Le prix est trop beau pour être vrai, demande virement western union.",
-            product: {
-                id: "p1",
-                title: "iPhone 15 Pro Max Neuf",
-                description: "Vends iPhone 15 Pro Max tout neuf sous blister. Prix ferme 200€. Contactez uniquement par mail.",
-                price: 200,
-                image_url: "https://placehold.co/600x400/png?text=iPhone+Fake",
-                seller_id: "s1",
-                seller_name: "VendeurLouche123"
+            listing_id: "l1",
+            reported_by: "u2",
+            listing: {
+                title: "iPhone 15 Pro Max pas cher",
+                images: ["https://placehold.co/600x400"]
+            },
+            reporter: {
+                email: "vigilant@example.com"
             }
         },
         {
             id: "r2",
             created_at: new Date(Date.now() - 86400000).toISOString(),
-            reason: "inappropriate",
+            reason: "Contenu inapproprié",
             status: "pending",
-            product_id: "p2",
-            reporter_id: "u3",
-            product: {
-                id: "p2",
-                title: "Service de massage",
-                description: "Services spéciaux...",
-                price: 50,
-                image_url: "https://placehold.co/600x400/png?text=Service",
-                seller_id: "s2",
-                seller_name: "UserAnon"
-            }
-        },
-        {
-            id: "r3",
-            created_at: new Date(Date.now() - 172800000).toISOString(),
-            reason: "spam",
-            status: "pending",
-            product_id: "p3",
-            reporter_id: "u4",
-            product: {
-                id: "p3",
-                title: "Gagnez de l'argent facile",
-                description: "Cliquez ici pour devenir riche.",
-                price: 0,
-                image_url: "https://placehold.co/600x400/png?text=Spam",
-                seller_id: "s3",
-                seller_name: "BotSpam"
+            listing_id: "l2",
+            reported_by: "u3",
+            listing: {
+                title: "Service douteux",
+                images: ["https://placehold.co/600x400"]
+            },
+            reporter: {
+                email: "citizen@example.com"
             }
         }
     ]
 
     const fetchReports = async () => {
         setIsLoading(true)
+
+        // @ts-ignore
+        if (supabaseAdmin['isMockClient'] || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+            setReports(MOCK_REPORTS)
+            setIsLoading(false)
+            return
+        }
+
         try {
-            // Simulation de la récupération avec jointure
-            // En prod : .select('*, product:products(*)')
+            // Updated query using real table relationships: reports -> listings, reports -> users (as reporter)
             const { data, error } = await supabaseAdmin
                 .from('reports')
-                .select('*')
+                .select('*, listing:listings(title, images), reporter:users(email)')
                 .eq('status', 'pending')
                 .order('created_at', { ascending: false })
 
-            if (error || !data || data.length === 0) {
-                // Fallback mock
+            if (error || !data) {
+                console.error("Error fetching reports:", error)
                 setReports(MOCK_REPORTS)
             } else {
-                setReports(data)
+                setReports(data as unknown as ReportJoined[])
             }
         } catch (err) {
+            console.error("Exception fetching reports:", err)
             setReports(MOCK_REPORTS)
         } finally {
             setIsLoading(false)
@@ -101,7 +87,7 @@ export default function ReportsPage() {
         fetchReports()
     }, [])
 
-    const handleOpenReview = (report: Report) => {
+    const handleOpenReview = (report: ReportJoined) => {
         setSelectedReport(report)
         setIsDialogOpen(true)
     }
@@ -110,76 +96,46 @@ export default function ReportsPage() {
         if (!selectedReport) return
         setActionLoading(true)
         try {
-            // Marquer comme traité/ignoré
             await supabaseAdmin.from('reports').update({ status: 'dismissed' }).eq('id', selectedReport.id)
-
-            // Update UI
-            setReports(reports.filter(r => r.id !== selectedReport.id))
-            setIsDialogOpen(false)
-        } finally {
-            setActionLoading(false)
-        }
-    }
-
-    const handleDeleteAd = async () => {
-        if (!selectedReport?.product) return
-        if (!confirm("Êtes-vous sûr de vouloir supprimer définitivement cette annonce ?")) return
-
-        setActionLoading(true)
-        try {
-            // 1. Supprimer le produit
-            await supabaseAdmin.from('products').delete().eq('id', selectedReport.product.id)
-            // 2. Marquer le signalement comme résolu
-            await supabaseAdmin.from('reports').update({ status: 'resolved' }).eq('id', selectedReport.id)
-
-            // Update UI
             setReports(reports.filter(r => r.id !== selectedReport.id))
             setIsDialogOpen(false)
         } catch (e) {
             console.error(e)
-            alert("Erreur lors de la suppression")
+            alert("Erreur lors de l'action.")
         } finally {
             setActionLoading(false)
         }
     }
 
-    const handleSuspendSeller = async () => {
-        if (!selectedReport?.product) return
-        if (!confirm(`Voulez-vous vraiment suspendre le compte de ${selectedReport.product.seller_name} ?`)) return
+    const handleDeleteListing = async () => {
+        if (!selectedReport) return
+        if (!confirm("Êtes-vous sûr de vouloir supprimer cette annonce ?")) return
 
         setActionLoading(true)
         try {
-            // Suspendre l'utilisateur
-            await supabaseAdmin.from('profiles').update({ status: 'suspended' }).eq('id', selectedReport.product.seller_id)
+            // 1. Delete from listings table
+            const { error: deleteError } = await supabaseAdmin.from('listings').delete().eq('id', selectedReport.listing_id)
+            if (deleteError) throw deleteError
 
-            // Optionnel : Supprimer ses annonces ou marquer le report résolu
+            // 2. Mark report as resolved
             await supabaseAdmin.from('reports').update({ status: 'resolved' }).eq('id', selectedReport.id)
 
             setReports(reports.filter(r => r.id !== selectedReport.id))
             setIsDialogOpen(false)
         } catch (e) {
             console.error(e)
-            alert("Erreur lors de la suspension")
+            alert("Erreur lors de la suppression de l'annonce.")
         } finally {
             setActionLoading(false)
-        }
-    }
-
-    const getReasonBadge = (reason: string) => {
-        switch (reason) {
-            case 'scam': return <Badge variant="destructive">Arnaque</Badge>
-            case 'inappropriate': return <Badge variant="destructive" className="bg-orange-500 hover:bg-orange-600">Inapproprié</Badge>
-            case 'spam': return <Badge variant="secondary">Spam</Badge>
-            default: return <Badge variant="outline">{reason}</Badge>
         }
     }
 
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
-                <h2 className="text-3xl font-bold tracking-tight">Signalements & Modération</h2>
+                <h2 className="text-3xl font-bold tracking-tight">Signalements</h2>
                 <Badge variant="outline" className="text-sm py-1 px-3">
-                    {reports.length} à traiter
+                    {reports.length} en attente
                 </Badge>
             </div>
 
@@ -189,22 +145,19 @@ export default function ReportsPage() {
                         <TableRow>
                             <TableHead>Date</TableHead>
                             <TableHead>Motif</TableHead>
-                            <TableHead>Annonce Concernée</TableHead>
+                            <TableHead>Annonce</TableHead>
+                            <TableHead>Signalé par</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
                             <TableRow>
-                                <TableCell colSpan={4} className="h-24 text-center">
-                                    Chargement...
-                                </TableCell>
+                                <TableCell colSpan={5} className="h-24 text-center">Chargement...</TableCell>
                             </TableRow>
                         ) : reports.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                                    Aucun signalement en attente.
-                                </TableCell>
+                                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">Aucun signalement en attente.</TableCell>
                             </TableRow>
                         ) : (
                             reports.map((report) => (
@@ -213,17 +166,19 @@ export default function ReportsPage() {
                                         {new Date(report.created_at).toLocaleDateString()}
                                     </TableCell>
                                     <TableCell>
-                                        {getReasonBadge(report.reason)}
+                                        <Badge variant="destructive" className="bg-orange-600 hover:bg-orange-700">
+                                            {report.reason}
+                                        </Badge>
                                     </TableCell>
                                     <TableCell>
-                                        {report.product ? (
-                                            <div className="flex flex-col">
-                                                <span className="font-semibold">{report.product.title}</span>
-                                                <span className="text-xs text-muted-foreground">par {report.product.seller_name}</span>
-                                            </div>
+                                        {report.listing ? (
+                                            <span className="font-semibold">{report.listing.title}</span>
                                         ) : (
-                                            <span className="text-muted-foreground italic">Annonce introuvable</span>
+                                            <span className="italic text-muted-foreground">Annonce supprimée</span>
                                         )}
+                                    </TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">
+                                        {report.reporter?.email || 'Anonyme'}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <Button size="sm" variant="outline" onClick={() => handleOpenReview(report)}>
@@ -239,81 +194,63 @@ export default function ReportsPage() {
             </Card>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-xl">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <AlertOctagon className="h-5 w-5 text-destructive" />
-                            Détail du signalement
+                            Détail du Signalement
                         </DialogTitle>
                         <DialogDescription>
-                            Signalé le {selectedReport && new Date(selectedReport.created_at).toLocaleDateString()} pour motif :
-                            <span className="font-semibold ml-1">{selectedReport?.reason}</span>
+                            Signalement ID: {selectedReport?.id}
                         </DialogDescription>
                     </DialogHeader>
 
-                    {selectedReport?.description && (
-                        <div className="bg-muted p-3 rounded-md text-sm border-l-4 border-yellow-500">
-                            <span className="font-semibold block mb-1">Commentaire du signalement :</span>
-                            "{selectedReport.description}"
+                    {selectedReport && (
+                        <div className="space-y-4">
+                            <div className="bg-muted p-3 rounded text-sm">
+                                <span className="font-bold block text-foreground mb-1">Motif : {selectedReport.reason}</span>
+                                <p className="text-muted-foreground">Signalé le {new Date(selectedReport.created_at).toLocaleString()}</p>
+                            </div>
+
+                            {selectedReport.listing && (
+                                <div className="border rounded p-3">
+                                    <h4 className="font-semibold mb-2">Annonce Concernée</h4>
+                                    <div className="flex gap-3">
+                                        {selectedReport.listing.images && selectedReport.listing.images[0] && (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img
+                                                src={selectedReport.listing.images[0]}
+                                                alt="Aperçu"
+                                                className="w-20 h-20 object-cover rounded bg-slate-200"
+                                            />
+                                        )}
+                                        <div>
+                                            <p className="font-medium">{selectedReport.listing.title}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 
-                    {selectedReport?.product && (
-                        <div className="grid md:grid-cols-2 gap-6 border rounded-lg p-4 mt-2">
-                            <div className="aspect-video bg-muted rounded-md overflow-hidden relative flex items-center justify-center">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                    src={selectedReport.product.image_url}
-                                    alt={selectedReport.product.title}
-                                    className="object-cover w-full h-full"
-                                />
-                                <div className="absolute top-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-sm font-bold">
-                                    {selectedReport.product.price} €
-                                </div>
-                            </div>
-                            <div className="space-y-4">
-                                <div>
-                                    <h3 className="text-xl font-bold">{selectedReport.product.title}</h3>
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                        Vendu par <span className="font-medium text-foreground">{selectedReport.product.seller_name}</span>
-                                    </p>
-                                </div>
-                                <div className="h-32 overflow-y-auto border rounded p-2 text-sm bg-muted/20">
-                                    {selectedReport.product.description}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    <DialogFooter className="gap-2 sm:gap-2 flex-wrap">
+                    <DialogFooter className="gap-2 sm:gap-0">
                         <Button
                             variant="outline"
-                            className="flex-1 border-green-600 text-green-600 hover:bg-green-50"
+                            className="text-green-600 border-green-200 hover:bg-green-50 mr-auto"
                             onClick={handleDismiss}
                             disabled={actionLoading}
                         >
                             <CheckCircle className="mr-2 h-4 w-4" />
-                            Ignorer (Sans suite)
+                            Ignorer (Non Fondé)
                         </Button>
 
                         <Button
                             variant="destructive"
-                            className="flex-1"
-                            onClick={handleDeleteAd}
+                            onClick={handleDeleteListing}
                             disabled={actionLoading}
                         >
                             <Trash2 className="mr-2 h-4 w-4" />
-                            Supprimer l'annonce
-                        </Button>
-
-                        <Button
-                            variant="destructive"
-                            className="flex-1 bg-black hover:bg-gray-800"
-                            onClick={handleSuspendSeller}
-                            disabled={actionLoading}
-                        >
-                            <ShieldOff className="mr-2 h-4 w-4" />
-                            Suspendre Vendeur
+                            Supprimer l'Annonce
                         </Button>
                     </DialogFooter>
                 </DialogContent>
