@@ -160,6 +160,11 @@ export default function VerificationsPage() {
                                             {app.users?.full_name || 'Utilisateur inconnu'}
                                         </CardTitle>
                                         <CardDescription>{app.users?.email || 'Email inconnu'}</CardDescription>
+                                        {app.id_number && (
+                                            <p className="text-xs font-mono bg-muted p-1 rounded w-fit mt-1">
+                                                {app.id_type || 'ID'}: {app.id_number}
+                                            </p>
+                                        )}
                                     </div>
                                     <Badge className="bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/50">
                                         En attente
@@ -197,8 +202,10 @@ export default function VerificationsPage() {
                                     <div className="font-medium border rounded-md p-2 bg-muted/20">{selectedApp.users?.full_name}</div>
                                 </div>
                                 <div className="space-y-1">
-                                    <Label>ID Application</Label>
-                                    <div className="font-medium border rounded-md p-2 bg-muted/20 text-xs truncate" title={selectedApp.id}>{selectedApp.id}</div>
+                                    <Label>Numéro Pièce Identité (NNI)</Label>
+                                    <div className="font-bold font-mono text-lg border rounded-md p-2 bg-blue-50 text-blue-800 border-blue-100">
+                                        {selectedApp.id_number || 'Non renseigné'} <span className="text-xs font-normal text-muted-foreground ml-1">({selectedApp.id_type || 'Type inconnu'})</span>
+                                    </div>
                                 </div>
                                 <div className="col-span-2 space-y-1">
                                     <Label>Email</Label>

@@ -52,6 +52,8 @@ export interface MerchantApplication {
     user_id: string;
     status: 'pending' | 'approved' | 'rejected';
     document_url: string;
+    id_number?: string;
+    id_type?: string;
     created_at: string;
 }
 
