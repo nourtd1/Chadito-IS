@@ -11,6 +11,7 @@ export interface User {
     nni_number: string;
     created_at: string;
     city?: string; // Explicitly requested for filtering
+    address?: string; // Full address from mobile app
     nni_document_path?: string; // Path to ID document in 'documents' bucket
 }
 

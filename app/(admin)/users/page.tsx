@@ -205,7 +205,7 @@ export default function UsersPage() {
                         <TableRow>
                             <TableHead>Utilisateur</TableHead>
                             <TableHead>Type de Compte</TableHead>
-                            <TableHead>Ville</TableHead>
+                            <TableHead>Adresse / Ville</TableHead>
                             <TableHead>Statut</TableHead>
                             <TableHead>Date création</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
@@ -232,7 +232,7 @@ export default function UsersPage() {
                                     <TableCell>
                                         {getAccountTypeBadge(user.account_type)}
                                     </TableCell>
-                                    <TableCell>{user.city || '-'}</TableCell>
+                                    <TableCell>{user.city || user.address || '-'}</TableCell>
                                     <TableCell>
                                         {getVerificationBadge(user.is_verified)}
                                     </TableCell>
@@ -275,8 +275,8 @@ export default function UsersPage() {
 
                             <div className="grid grid-cols-2 gap-4 text-sm border-t pt-4">
                                 <div>
-                                    <span className="font-semibold text-muted-foreground block mb-1">Ville</span>
-                                    {selectedUser.city || 'Non renseigné'}
+                                    <span className="font-semibold text-muted-foreground block mb-1">Adresse / Ville</span>
+                                    {selectedUser.city || selectedUser.address || 'Non renseigné'}
                                 </div>
                                 <div>
                                     <span className="font-semibold text-muted-foreground block mb-1">Numéro NNI</span>
