@@ -139,11 +139,11 @@ export async function getReports() {
             .order('created_at', { ascending: false })
 
         if (error) {
-            console.error("Signed URL error:", error, "Path:", path)
+            console.error("Signed URL error:", error)
             throw error
         }
 
-        console.log("Signed URL generated:", data?.signedUrl, "Path:", path)
+        console.log("Signed URL generated:", data?.signedUrl)
         return data as unknown as ReportJoined[]
     } catch (e) {
         console.error(e)
