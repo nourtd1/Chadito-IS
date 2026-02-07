@@ -132,9 +132,18 @@ export async function getReports() {
     // @ts-ignore
     if (supabaseAdmin['isMockClient']) return []
     try {
-        const { data, error } = await supabaseAdmin
+        const { data: reports, error } = await supabaseAdmin
             .from('reports')
-            .select('*, listing:listings(title, images), reporter:users(email)')
+            .select(`
+                id,
+                created_at,
+                reason,
+                description,
+                status,
+                target_id,
+                target_type,
+                reporter_id
+            `)
             .eq('status', 'pending')
             .order('created_at', { ascending: false })
 
@@ -143,9 +152,49 @@ export async function getReports() {
             throw error
         }
 
-        return data as unknown as ReportJoined[]
+        // 1. Fetch Reporters
+        const reporterIds = Array.from(new Set(reports.map(r => r.reporter_id).filter(Boolean)))
+        let userMap = new Map()
+        if (reporterIds.length > 0) {
+            const { data: users } = await supabaseAdmin
+                .from('users')
+                .select('id, email')
+                .in('id', reporterIds)
+
+            if (users) {
+                userMap = new Map(users.map(u => [u.id, u]))
+            }
+        }
+
+        // 2. Fetch Listings (targets)
+        const listingIds = Array.from(new Set(
+            reports
+                .filter(r => r.target_type === 'product' && r.target_id)
+                .map(r => r.target_id)
+        ))
+
+        let listingMap = new Map()
+        if (listingIds.length > 0) {
+            const { data: listings } = await supabaseAdmin
+                .from('listings')
+                .select('id, title, images')
+                .in('id', listingIds)
+
+            if (listings) {
+                listingMap = new Map(listings.map(l => [l.id, l]))
+            }
+        }
+
+        // 3. Assemble Data
+        const joinedReports: ReportJoined[] = reports.map(r => ({
+            ...r,
+            reporter: r.reporter_id ? userMap.get(r.reporter_id) : { email: 'Inconnu' },
+            listing: (r.target_type === 'product' && r.target_id) ? listingMap.get(r.target_id) : undefined
+        }))
+
+        return joinedReports
     } catch (e) {
-        console.error(e)
+        console.error("Exception in getReports:", e)
         return []
     }
 }

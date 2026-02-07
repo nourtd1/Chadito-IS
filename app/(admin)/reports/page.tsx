@@ -59,7 +59,7 @@ export default function ReportsPage() {
 
         setActionLoading(true)
         try {
-            await resolveReport(selectedReport.id, 'delete_listing', selectedReport.listing_id)
+            await resolveReport(selectedReport.id, 'delete_listing', selectedReport.target_id)
             setReports(reports.filter(r => r.id !== selectedReport.id))
             setIsDialogOpen(false)
         } catch (e) {
@@ -111,10 +111,14 @@ export default function ReportsPage() {
                                         </Badge>
                                     </TableCell>
                                     <TableCell>
-                                        {report.listing ? (
-                                            <span className="font-semibold">{report.listing.title}</span>
+                                        {report.target_type === 'product' ? (
+                                            report.listing ? (
+                                                <span className="font-semibold">{report.listing.title}</span>
+                                            ) : (
+                                                <span className="italic text-muted-foreground">Annonce supprimée</span>
+                                            )
                                         ) : (
-                                            <span className="italic text-muted-foreground">Annonce supprimée</span>
+                                            <span className="font-semibold">Utilisateur {report.target_id.substring(0, 8)}...</span>
                                         )}
                                     </TableCell>
                                     <TableCell className="text-sm text-muted-foreground">
@@ -184,14 +188,16 @@ export default function ReportsPage() {
                             Ignorer (Non Fondé)
                         </Button>
 
-                        <Button
-                            variant="destructive"
-                            onClick={handleDeleteListing}
-                            disabled={actionLoading}
-                        >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Supprimer l'Annonce
-                        </Button>
+                        {selectedReport && selectedReport.target_type === 'product' && (
+                            <Button
+                                variant="destructive"
+                                onClick={handleDeleteListing}
+                                disabled={actionLoading}
+                            >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Supprimer l'Annonce
+                            </Button>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

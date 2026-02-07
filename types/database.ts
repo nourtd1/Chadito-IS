@@ -27,9 +27,11 @@ export interface Listing {
 
 export interface Report {
     id: string;
-    listing_id: string;
-    reported_by: string;
+    target_id: string;
+    target_type: 'product' | 'user';
+    reporter_id: string;
     reason: string;
+    description?: string;
     status: string; // 'pending' | 'resolved' | 'dismissed'
     created_at: string;
 }
