@@ -43,3 +43,15 @@ export interface ReportJoined extends Report {
         email: string;
     };
 }
+
+export interface MerchantApplication {
+    id: string;
+    user_id: string;
+    status: 'pending' | 'approved' | 'rejected';
+    document_url: string;
+    created_at: string;
+}
+
+export interface MerchantApplicationJoined extends MerchantApplication {
+    users: User; // Assuming single user relation
+}

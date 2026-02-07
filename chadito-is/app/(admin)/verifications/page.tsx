@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import type { User } from "@/types/database"
-import { getPendingVerifications, updateUserStatus, getSignedDocUrl } from "@/app/actions"
+import type { MerchantApplicationJoined } from "@/types/database"
+import { getPendingVerifications, approveMerchantApplication, rejectMerchantApplication, getSignedDocUrl } from "@/app/actions"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,9 +12,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Check, X, Loader2, Eye, AlertTriangle } from "lucide-react"
 
 export default function VerificationsPage() {
-    const [users, setUsers] = useState<User[]>([])
+    const [applications, setApplications] = useState<MerchantApplicationJoined[]>([])
     const [isLoading, setIsLoading] = useState(true)
-    const [selectedUser, setSelectedUser] = useState<User | null>(null)
+    const [selectedApp, setSelectedApp] = useState<MerchantApplicationJoined | null>(null)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [rejectionReason, setRejectionReason] = useState("")
     const [actionLoading, setActionLoading] = useState(false)
@@ -23,48 +23,18 @@ export default function VerificationsPage() {
     const [signedDocumentUrl, setSignedDocumentUrl] = useState<string | null>(null)
     const [isImageLoading, setIsImageLoading] = useState(false)
 
-    // Simulation DATA aligned with User type
-    const MOCK_USERS: User[] = [
-        {
-            id: "1",
-            created_at: new Date().toISOString(),
-            email: "jean.merchant@example.com",
-            full_name: "Jean Dupont",
-            is_verified: false,
-            nni_number: "123456",
-            nni_document_path: "mock/path/id_card.png",
-            account_type: 'standard', // Applied for merchant
-            avatar_url: '',
-            city: "N'Djamena"
-        },
-        {
-            id: "2",
-            created_at: new Date().toISOString(),
-            email: "marie.curie@example.com",
-            full_name: "Marie Curie",
-            is_verified: false,
-            nni_number: "987654",
-            nni_document_path: "mock/path/passport.png",
-            account_type: 'standard',
-            avatar_url: '',
-            city: "Moundou"
-        }
-    ]
-
     const fetchPendingVerifications = async () => {
         setIsLoading(true)
         try {
             const data = await getPendingVerifications()
             if (data && data.length > 0) {
-                setUsers(data)
+                setApplications(data)
             } else {
-                // Fallback to mocks only if completely empty and env mandates it? 
-                // For now, if empty, we trust it's empty.
-                setUsers([])
+                setApplications([])
             }
         } catch (err) {
             console.error('Unexpected error:', err)
-            setUsers([])
+            setApplications([])
         } finally {
             setIsLoading(false)
         }
@@ -74,25 +44,29 @@ export default function VerificationsPage() {
         fetchPendingVerifications()
     }, [])
 
-    const handleOpenReview = async (user: User) => {
-        setSelectedUser(user)
+    const handleOpenReview = async (app: MerchantApplicationJoined) => {
+        setSelectedApp(app)
         setRejectionReason("")
         setSignedDocumentUrl(null)
         setIsDialogOpen(true)
 
-        // Fetch signed URL if path exists
-        if (user.nni_document_path) {
+        // Fetch signed URL if document_url exists
+        if (app.document_url) {
             setIsImageLoading(true)
             try {
-                const url = await getSignedDocUrl(user.nni_document_path)
-                if (url) {
-                    setSignedDocumentUrl(url)
+                // Check if it's already a full URL or a path
+                if (app.document_url.startsWith('http')) {
+                    setSignedDocumentUrl(app.document_url)
                 } else {
-                    // Fallback mock check handled in action? No, action returns null if fails.
-                    // Client side fallback for demo if needed
-                    const isMock = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder')
-                    if (isMock) {
-                        setSignedDocumentUrl("https://placehold.co/600x400/png?text=Document+Securise")
+                    const url = await getSignedDocUrl(app.document_url)
+                    if (url) {
+                        setSignedDocumentUrl(url)
+                    } else {
+                        // Fallback mock check handled in action?
+                        const isMock = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder')
+                        if (isMock) {
+                            setSignedDocumentUrl("https://placehold.co/600x400/png?text=Document+Securise")
+                        }
                     }
                 }
             } catch (e) {
@@ -104,17 +78,14 @@ export default function VerificationsPage() {
     }
 
     const handleAccept = async () => {
-        if (!selectedUser) return
+        if (!selectedApp) return
         setActionLoading(true)
         try {
-            const { success } = await updateUserStatus(selectedUser.id, {
-                is_verified: true,
-                account_type: 'merchant'
-            })
+            const { success } = await approveMerchantApplication(selectedApp.id, selectedApp.user_id)
 
             if (!success) throw new Error("Update failed")
 
-            setUsers(users.filter(u => u.id !== selectedUser.id))
+            setApplications(applications.filter(a => a.id !== selectedApp.id))
             setIsDialogOpen(false)
         } catch (error) {
             console.error('Error verifying user:', error)
@@ -125,7 +96,7 @@ export default function VerificationsPage() {
     }
 
     const handleReject = async () => {
-        if (!selectedUser) return
+        if (!selectedApp) return
         if (!rejectionReason.trim()) {
             alert("Le motif de rejet est obligatoire.")
             return
@@ -133,11 +104,11 @@ export default function VerificationsPage() {
 
         setActionLoading(true)
         try {
-            // Logic handled purely client side for now as per previous implementation (logging) 
-            // since we don't have a status field for rejection.
-            console.log(`Rejected user ${selectedUser.id} for reason: ${rejectionReason}`)
+            const { success } = await rejectMerchantApplication(selectedApp.id, rejectionReason)
 
-            setUsers(users.filter(u => u.id !== selectedUser.id))
+            if (!success) throw new Error("Reject failed")
+
+            setApplications(applications.filter(a => a.id !== selectedApp.id))
             setIsDialogOpen(false)
         } catch (error) {
             console.error('Error rejecting user:', error)
@@ -152,7 +123,7 @@ export default function VerificationsPage() {
             <div className="flex items-center justify-between">
                 <h2 className="text-3xl font-bold tracking-tight">Validation des Vendeurs</h2>
                 <Badge variant="outline" className="text-sm py-1 px-3">
-                    {users.length} en attente
+                    {applications.length} en attente
                 </Badge>
             </div>
 
@@ -160,7 +131,7 @@ export default function VerificationsPage() {
                 <div className="flex justify-center p-12">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
-            ) : users.length === 0 ? (
+            ) : applications.length === 0 ? (
                 <Card className="bg-muted/50 border-dashed">
                     <CardContent className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
                         <Check className="h-12 w-12 mb-4 text-green-500" />
@@ -170,15 +141,15 @@ export default function VerificationsPage() {
                 </Card>
             ) : (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {users.map((user) => (
-                        <Card key={user.id} className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => handleOpenReview(user)}>
+                    {applications.map((app) => (
+                        <Card key={app.id} className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => handleOpenReview(app)}>
                             <CardHeader className="pb-2">
                                 <div className="flex justify-between items-start">
                                     <div className="space-y-1">
                                         <CardTitle className="text-base font-semibold">
-                                            {user.full_name}
+                                            {app.users?.full_name || 'Utilisateur inconnu'}
                                         </CardTitle>
-                                        <CardDescription>{user.email}</CardDescription>
+                                        <CardDescription>{app.users?.email || 'Email inconnu'}</CardDescription>
                                     </div>
                                     <Badge className="bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-500/50">
                                         En attente
@@ -186,7 +157,7 @@ export default function VerificationsPage() {
                                 </div>
                             </CardHeader>
                             <CardContent className="text-sm text-muted-foreground">
-                                <p>Candidature reçue le : {new Date(user.created_at).toLocaleDateString()}</p>
+                                <p>Candidature reçue le : {new Date(app.created_at).toLocaleDateString()}</p>
                             </CardContent>
                             <CardFooter className="pt-2">
                                 <Button variant="secondary" className="w-full text-xs h-8">
@@ -208,20 +179,20 @@ export default function VerificationsPage() {
                         </DialogDescription>
                     </DialogHeader>
 
-                    {selectedUser && (
+                    {selectedApp && (
                         <div className="grid gap-6 py-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <Label>Nom Complet</Label>
-                                    <div className="font-medium border rounded-md p-2 bg-muted/20">{selectedUser.full_name}</div>
+                                    <div className="font-medium border rounded-md p-2 bg-muted/20">{selectedApp.users?.full_name}</div>
                                 </div>
                                 <div className="space-y-1">
-                                    <Label>Numéro NNI</Label>
-                                    <div className="font-medium border rounded-md p-2 bg-muted/20">{selectedUser.nni_number || 'Non renseigné'}</div>
+                                    <Label>ID Application</Label>
+                                    <div className="font-medium border rounded-md p-2 bg-muted/20 text-xs truncate" title={selectedApp.id}>{selectedApp.id}</div>
                                 </div>
                                 <div className="col-span-2 space-y-1">
                                     <Label>Email</Label>
-                                    <div className="font-medium border rounded-md p-2 bg-muted/20">{selectedUser.email}</div>
+                                    <div className="font-medium border rounded-md p-2 bg-muted/20">{selectedApp.users?.email}</div>
                                 </div>
                             </div>
 
@@ -247,7 +218,7 @@ export default function VerificationsPage() {
                                         </div>
                                     )}
                                 </div>
-                                {selectedUser.nni_document_path && !isImageLoading && signedDocumentUrl && (
+                                {selectedApp.document_url && !isImageLoading && signedDocumentUrl && (
                                     <p className="text-xs text-green-600 flex items-center gap-1 mt-1">
                                         <Check className="h-3 w-3" /> Lien signé temporaire généré (valide 60s)
                                     </p>

@@ -1,7 +1,7 @@
 'use server'
 
 import { supabaseAdmin } from "@/lib/supabase"
-import type { User, ReportJoined, Listing } from "@/types/database"
+import type { User, ReportJoined, Listing, MerchantApplicationJoined } from "@/types/database"
 
 export async function getUsers() {
     try {
@@ -30,19 +30,59 @@ export async function getPendingVerifications() {
         if (supabaseAdmin['isMockClient']) return []
 
         const { data, error } = await supabaseAdmin
-            .from('users')
-            .select('*')
-            .eq('is_verified', false)
-            .neq('nni_document_path', null) // Correct syntax for not null is neq null or not.is.null via separate modifier
-            // Actually .not('column', 'is', null) is the way. Let's fix syntax below if issue arises.
-            // Using raw filter here to be safe:
-            .not('nni_document_path', 'is', null)
+            .from('merchant_applications')
+            .select('*, users(*)')
+            .eq('status', 'pending')
 
         if (error) throw error
-        return data as User[]
+        return data as unknown as MerchantApplicationJoined[]
     } catch (e) {
         console.error("Server Action Pending Verifications Error:", e)
         return []
+    }
+}
+
+export async function approveMerchantApplication(applicationId: string, userId: string) {
+    try {
+        // 1. Update application status
+        const { error: appError } = await supabaseAdmin
+            .from('merchant_applications')
+            .update({ status: 'approved' })
+            .eq('id', applicationId)
+
+        if (appError) throw appError
+
+        // 2. Update user status
+        const { error: userError } = await supabaseAdmin
+            .from('users')
+            .update({
+                account_type: 'merchant',
+                verification_status: 'verified',
+                is_verified: true // keeping for backward compatibility
+            })
+            .eq('id', userId)
+
+        if (userError) throw userError
+
+        return { success: true }
+    } catch (e) {
+        console.error("Error approving application:", e)
+        return { success: false, error: e }
+    }
+}
+
+export async function rejectMerchantApplication(applicationId: string, reason: string) {
+    try {
+        const { error } = await supabaseAdmin
+            .from('merchant_applications')
+            .update({ status: 'rejected' })
+            .eq('id', applicationId)
+
+        if (error) throw error
+        return { success: true }
+    } catch (e) {
+        console.error("Error rejecting application:", e)
+        return { success: false, error: e }
     }
 }
 
