@@ -31,7 +31,7 @@ export async function getPendingVerifications() {
 
         const { data, error } = await supabaseAdmin
             .from('merchant_applications')
-            .select('*, users(*)')
+            .select('*, users:users!merchant_applications_user_id_fkey(*)')
             .eq('status', 'pending')
 
         if (error) throw error
