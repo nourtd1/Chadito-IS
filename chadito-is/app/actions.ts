@@ -138,7 +138,12 @@ export async function getReports() {
             .eq('status', 'pending')
             .order('created_at', { ascending: false })
 
-        if (error) throw error
+        if (error) {
+            console.error("Signed URL error:", error, "Path:", path)
+            throw error
+        }
+
+        console.log("Signed URL generated:", data?.signedUrl, "Path:", path)
         return data as unknown as ReportJoined[]
     } catch (e) {
         console.error(e)
@@ -181,10 +186,15 @@ export async function getSignedDocUrl(path: string) {
             .from('documents')
             .createSignedUrl(path, 60)
 
-        if (error) throw error
+        if (error) {
+            console.error("Signed URL error:", error, "Path:", path)
+            throw error
+        }
+
+        console.log("Signed URL generated:", data?.signedUrl, "Path:", path)
         return data?.signedUrl
     } catch (e) {
-        console.error(e)
+        console.error("Exception in getSignedDocUrl:", e)
         return null
     }
 }

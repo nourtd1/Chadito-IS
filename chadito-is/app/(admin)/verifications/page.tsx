@@ -55,10 +55,20 @@ export default function VerificationsPage() {
             setIsImageLoading(true)
             try {
                 // Check if it's already a full URL or a path
-                if (app.document_url.startsWith('http')) {
-                    setSignedDocumentUrl(app.document_url)
+                let docPath = app.document_url
+
+                // If it's a Supabase Public URL from 'documents' bucket, extract the path
+                if (docPath.includes('/storage/v1/object/public/documents/')) {
+                    docPath = docPath.split('/storage/v1/object/public/documents/')[1]
+                }
+
+                // If check fails or not a supabase url, check if it's still a full http url
+                // If so, we can't really sign it easily unless we know the bucket (which we assume is documents)
+                // But if it's external, we just use it.
+                if (docPath.startsWith('http') || docPath.startsWith('https')) {
+                    setSignedDocumentUrl(docPath)
                 } else {
-                    const url = await getSignedDocUrl(app.document_url)
+                    const url = await getSignedDocUrl(docPath)
                     if (url) {
                         setSignedDocumentUrl(url)
                     } else {
